@@ -1,0 +1,11 @@
+xen-bugtool plugin which runs "fs -mode summarise"
+
+init.d script which runs early in boot
+  simple switch to turn into "non-persistent" mode (eg touch a file)
+
+add data from host-installer to whitelist
+
+check doesn't cross fs boundaries with NFS
+
+
+

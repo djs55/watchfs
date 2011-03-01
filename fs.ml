@@ -76,25 +76,67 @@ let diff a b =
 			StringMap.mem path b && (StringMap.find path b = file)
 		) a
 
+let whitelist_of_file filename = 
+	let lines = Unixext.file_lines_fold 
+		(fun acc line -> 
+			if String.startswith "#" line then acc
+			else begin
+				(* Check each line is itself a valid regexp *)
+				begin 
+					try let (_:Str.regexp) = Str.regexp line in ()
+					with e ->
+						Printf.fprintf stderr "Failed to parse whitelist file line: %s\n" line;
+						raise e
+				end;
+				line :: acc
+			end
+		) [] filename in
+	if lines = []
+	then None
+	else 
+		let r = "\\(" ^ (String.concat " \\| " lines) ^ "\\)" in
+		Some (Str.regexp r)
+
+let diff_whitelist a r = 
+	StringMap.partition
+		(fun path file ->
+			match r with
+				| None -> false
+				| Some r -> Str.string_match r path 0
+		) a
+
 let _ =
 	let path = ref "/root" in
 	let db = ref "/home/djs/files.db" in
+	let whitelist = ref "" in
 	Arg.parse
 		[ 
 			"-path", Arg.Set_string path, Printf.sprintf "Path to scan (default %s)" !path;
 			"-db", Arg.Set_string db, Printf.sprintf "Path to database (default %s)" !db;
+			"-whitelist", Arg.Set_string whitelist, Printf.sprintf "Path to whitelist (default %s)" !whitelist;
 		]
 		(fun x -> Printf.fprintf stderr "Skipping unknown argument: %s\n%!" x)
 		"Scan for modified files in a filesystem";
 
 	if Sys.file_exists !db then begin
+		let whitelist = if Sys.file_exists !whitelist then whitelist_of_file !whitelist else None in
 		let previous = of_file !db in
 		let current = of_dir !path in
-		let same, different = diff previous current in
-		if different <> StringMap.empty then begin
-			Printf.printf "There are unexpected filesystem differences:\n";
+		let _, modified = diff previous current in
+		let _, created = diff current previous in
+		let different = StringMap.merge
+			(fun path a b -> match a, b with
+				| Some f, _ -> Some f
+				| _, Some f -> Some f
+				| None, None -> None) modified created in
+
+		let expected, unexpected = diff_whitelist different whitelist in
+				
+		Printf.printf "Total: %d filesystem differences; %d expected and in whitelist; %d unexpected\n" (List.length (StringMap.bindings different)) (List.length (StringMap.bindings expected)) (List.length (StringMap.bindings unexpected));
+		if unexpected <> StringMap.empty then begin
+			Printf.printf "Unexpected filesystem differences:\n";
 			StringMap.iter (fun path file -> 
-				Printf.printf "     %Ld %s\n" file.File.mtime path) different;
+				Printf.printf "     %Ld %s\n" file.File.mtime path) unexpected;
 			exit 1;
 		end else begin
 			Printf.printf "No unexpected filesystem differences.\n";

@@ -76,6 +76,19 @@ let diff a b =
 			StringMap.mem path b && (StringMap.find path b = file)
 		) a
 
+type whitelist_kind = 
+		| Ignore  (** harmless mutation: ignore these *)
+		| Trash   (** rubbish which should be deleted on boot *)
+		| Persist (** configuration data which must be preserved *)
+
+let whitelist_kind_of_string = function
+	| "I" -> Ignore
+	| "T" -> Trash
+	| "P" -> Persist
+	| x -> failwith (Printf.sprintf "Unknown whitelist_kind: %s" x)
+
+open Listext
+
 let whitelist_of_file filename = 
 	let lines = Unixext.file_lines_fold 
 		(fun acc line -> 
@@ -83,7 +96,7 @@ let whitelist_of_file filename =
 			if line = "" || (String.startswith "#" line) then acc
 			else begin
 				match String.split ':' ~limit:2 line with
-					| _ :: r :: [] ->
+					| (("I" | "T" | "P" ) as key) :: r :: [] ->
 						(* Check r is itself a valid regexp *)
 						begin 
 							try let (_:Str.regexp) = Str.regexp r in ()
@@ -91,16 +104,20 @@ let whitelist_of_file filename =
 								Printf.fprintf stderr "Failed to parse whitelist file line: %s\n" line;
 								raise e
 						end;
-						r :: acc
+						(whitelist_kind_of_string key, r) :: acc
 					| _ -> 
 						failwith (Printf.sprintf "Failed to parse whitelist file line: %s\n" line)
 			end
 		) [] filename in
-	if lines = []
-	then None
-	else 
-		let r = "\\(" ^ (String.concat "\\|" lines) ^ "\\)" in
-		Some (Str.regexp r)
+	let regexp_of_lines = function
+		| [] -> None
+		| lines -> 
+			let r = "\\(" ^ (String.concat "\\|" lines) ^ "\\)" in
+			Some (Str.regexp r) in
+	let one kind =
+		kind, regexp_of_lines (List.filter_map (fun (key, line) -> if key = kind then Some line else None) lines) in
+	[ one Ignore; one Trash; one Persist ]
+
 
 let diff_whitelist a r = 
 	StringMap.partition
@@ -124,7 +141,10 @@ let _ =
 		"Scan for modified files in a filesystem";
 
 	if Sys.file_exists !db then begin
-		let whitelist = if Sys.file_exists !whitelist then whitelist_of_file !whitelist else None in
+		let whitelist = 
+			if Sys.file_exists !whitelist 
+			then whitelist_of_file !whitelist 
+			else [ Ignore, None; Persist, None; Trash, None ] in
 		let previous = of_file !db in
 		let current = of_dir !path in
 		let _, modified = diff previous current in
@@ -135,13 +155,20 @@ let _ =
 				| _, Some f -> Some f
 				| None, None -> None) modified created in
 
-		let expected, unexpected = diff_whitelist different whitelist in
+		let ignore, rest = diff_whitelist different (List.assoc Ignore whitelist) in
+		let trash, rest = diff_whitelist rest (List.assoc Trash whitelist) in
+		let persist, rest = diff_whitelist rest (List.assoc Persist whitelist) in
 				
-		Printf.printf "Total: %d filesystem differences; %d expected and in whitelist; %d unexpected\n" (List.length (StringMap.bindings different)) (List.length (StringMap.bindings expected)) (List.length (StringMap.bindings unexpected));
-		if unexpected <> StringMap.empty then begin
+		Printf.printf "Total: %d filesystem differences\n" (List.length (StringMap.bindings different));
+		Printf.printf "Whitelist/Ignore:  %d\n" (List.length (StringMap.bindings ignore));
+		Printf.printf "Whitelist/Trash:   %d\n" (List.length (StringMap.bindings trash));
+		Printf.printf "Whitelist/Persist: %d\n" (List.length (StringMap.bindings persist));
+		Printf.printf "Unexpected: %d\n" (List.length (StringMap.bindings rest));
+
+		if rest <> StringMap.empty then begin
 			Printf.printf "Unexpected filesystem differences:\n";
 			StringMap.iter (fun path file -> 
-				Printf.printf "     %Ld %s\n" file.File.mtime path) unexpected;
+				Printf.printf "     %Ld %s\n" file.File.mtime path) rest;
 			exit 1;
 		end else begin
 			Printf.printf "No unexpected filesystem differences.\n";

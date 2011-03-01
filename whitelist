@@ -1,0 +1,28 @@
+# This is a whitelist suitable for XCP
+#
+# Each line has the form:
+#   type:regexp
+# where type is one of:
+# I : ignore these files (harmless mutations)
+# T : transient files; delete on boot
+# P : persistent state; preserve across reboots
+#
+I:/tmp
+I:/etc$
+T:/etc/blkid$
+T:/etc/blkid/blkid.tab$
+I:/etc/lvm/backup
+I:/etc/lvm/cache
+I:/etc/mtab$
+T:/etc/openvswitch/conf.db$
+T:/var/lock/sm
+P:/var/log
+T:/var/run
+P:/var/xapi/blobs/messages
+P:/var/xapi/blobs/rrds$
+T:/var/xapi/forker
+P:/var/xapi/local.db$
+P:/var/xapi/state.db$
+P:/var/xapi/state.db.generation$
+T:/var/xapi/udhcpd.conf$
+T:/var/xen/vncterm

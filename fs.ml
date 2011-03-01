@@ -1,14 +1,32 @@
 
+open Stringext
+
 module File = struct
 	type t = {
 		path: string;
 		mtime: int64;
+		size: int64;
 	}
 	let of_stat path s =
 		{ 
 			path = path; 
 			mtime = Int64.of_float s.Unix.LargeFile.st_mtime; 
+			size = s.Unix.LargeFile.st_size;
 		}
+
+	let of_string line =
+		match List.rev (String.split ',' line) with
+			| mtime :: size :: rest ->
+				let path = String.concat "," (List.rev rest) in
+				{ 
+					mtime = Int64.of_string mtime;
+					size = Int64.of_string size;
+					path = path
+				}
+			| _ ->
+				raise Not_found
+	let to_string x =
+		Printf.sprintf "%s,%Ld,%Ld\n" x.path x.size x.mtime
 end
 
 module StringMap = Map.Make(struct type t = string let compare = compare end)
@@ -42,14 +60,12 @@ let of_dir (root: string) =
 		f root (s.Unix.LargeFile.st_dev, IntSet.empty, StringMap.empty) in
 	files
 
-open Stringext
-
 let to_file index filename = 
 	Unixext.with_file filename [ Unix.O_WRONLY; Unix.O_CREAT ] 0o644 
 		(fun fd ->
 			StringMap.iter
 				(fun path file ->
-					let s = Printf.sprintf "%s,%Ld\n" path file.File.mtime in
+					let s = File.to_string file in
 					ignore(Unix.write fd s 0 (String.length s))
 				) index
 		)
@@ -57,17 +73,12 @@ let to_file index filename =
 let of_file = 
 	Unixext.file_lines_fold
 		(fun index line ->
-			match List.rev (String.split ',' line) with
-				| mtime :: rest ->
-					let path = String.concat "," (List.rev rest) in
-					let file = { 
-						File.mtime = Int64.of_string mtime;
-						File.path = path
-					} in
-					StringMap.add path file index
-				| _ ->
-					Printf.fprintf stderr "Skipping line: %s\n" line;
-					index
+			try
+				let file = File.of_string line in
+				StringMap.add file.File.path file index
+			with Not_found ->
+				Printf.fprintf stderr "Skipping line: %s\n" line;
+				index
 		) StringMap.empty 
 
 let diff a b = 
@@ -75,6 +86,12 @@ let diff a b =
 		(fun path file ->
 			StringMap.mem path b && (StringMap.find path b = file)
 		) a
+
+let stats a = 
+	StringMap.fold
+		(fun path file (nfiles, nbytes) -> Int64.(add nfiles 1L, add nbytes file.File.size)) a (0L, 0L)
+
+let string_of_stats (nfiles, nbytes) = Printf.sprintf "%Ld files (%Ld KiB)" nfiles (Int64.div nbytes 1024L)			
 
 type whitelist_kind = 
 		| Ignore  (** harmless mutation: ignore these *)
@@ -127,15 +144,26 @@ let diff_whitelist a r =
 				| Some r -> Str.string_match r path 0
 		) a
 
+type mode = 
+		| Summarise
+		| Delete
+		| List
+
 let _ =
 	let path = ref "/root" in
 	let db = ref "/home/djs/files.db" in
 	let whitelist = ref "" in
+	let mode = ref Summarise in
 	Arg.parse
 		[ 
 			"-path", Arg.Set_string path, Printf.sprintf "Path to scan (default %s)" !path;
 			"-db", Arg.Set_string db, Printf.sprintf "Path to database (default %s)" !db;
 			"-whitelist", Arg.Set_string whitelist, Printf.sprintf "Path to whitelist (default %s)" !whitelist;
+			"-mode", Arg.Symbol ([ "summarise"; "delete"; "list" ], function
+					| "summarise" -> mode := Summarise
+					| "delete" -> mode := Delete
+					| "list" -> mode := List
+					| _ -> assert false), "Mode (default: summarise)";
 		]
 		(fun x -> Printf.fprintf stderr "Skipping unknown argument: %s\n%!" x)
 		"Scan for modified files in a filesystem";
@@ -158,22 +186,28 @@ let _ =
 		let ignore, rest = diff_whitelist different (List.assoc Ignore whitelist) in
 		let trash, rest = diff_whitelist rest (List.assoc Trash whitelist) in
 		let persist, rest = diff_whitelist rest (List.assoc Persist whitelist) in
+			
+		match !mode with
+			| Summarise ->
+				Printf.printf "Total:             %s\n" (string_of_stats (stats different));
+				Printf.printf "Whitelist/Ignore:  %s\n" (string_of_stats (stats ignore));
+				Printf.printf "Whitelist/Trash:   %s\n" (string_of_stats (stats trash));
+				Printf.printf "Whitelist/Persist: %s\n" (string_of_stats (stats persist));
+				Printf.printf "Unexpected:        %s\n" (string_of_stats (stats rest));
 				
-		Printf.printf "Total: %d filesystem differences\n" (List.length (StringMap.bindings different));
-		Printf.printf "Whitelist/Ignore:  %d\n" (List.length (StringMap.bindings ignore));
-		Printf.printf "Whitelist/Trash:   %d\n" (List.length (StringMap.bindings trash));
-		Printf.printf "Whitelist/Persist: %d\n" (List.length (StringMap.bindings persist));
-		Printf.printf "Unexpected: %d\n" (List.length (StringMap.bindings rest));
-
-		if rest <> StringMap.empty then begin
-			Printf.printf "Unexpected filesystem differences:\n";
-			StringMap.iter (fun path file -> 
-				Printf.printf "     %Ld %s\n" file.File.mtime path) rest;
-			exit 1;
-		end else begin
-			Printf.printf "No unexpected filesystem differences.\n";
-			exit 0;
-		end
+				if rest <> StringMap.empty then begin
+					Printf.printf "Unexpected filesystem differences:\n";
+					StringMap.iter (fun path file -> 
+						Printf.printf "     %Ld %s\n" file.File.mtime path) rest;
+					exit 1;
+				end else begin
+					Printf.printf "No unexpected filesystem differences.\n";
+					exit 0;
+				end
+			| List ->
+				StringMap.iter (fun path file -> 
+					Printf.printf "%s\n" path) rest
+			| Delete -> failwith "Unimplemented"
 	end else begin
 		Printf.printf "Creating initial database\n";
 		let current = of_dir !path in

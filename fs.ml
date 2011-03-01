@@ -79,22 +79,27 @@ let diff a b =
 let whitelist_of_file filename = 
 	let lines = Unixext.file_lines_fold 
 		(fun acc line -> 
-			if String.startswith "#" line then acc
+			let line = String.strip String.isspace line in
+			if line = "" || (String.startswith "#" line) then acc
 			else begin
-				(* Check each line is itself a valid regexp *)
-				begin 
-					try let (_:Str.regexp) = Str.regexp line in ()
-					with e ->
-						Printf.fprintf stderr "Failed to parse whitelist file line: %s\n" line;
-						raise e
-				end;
-				line :: acc
+				match String.split ':' ~limit:2 line with
+					| _ :: r :: [] ->
+						(* Check r is itself a valid regexp *)
+						begin 
+							try let (_:Str.regexp) = Str.regexp r in ()
+							with e ->
+								Printf.fprintf stderr "Failed to parse whitelist file line: %s\n" line;
+								raise e
+						end;
+						r :: acc
+					| _ -> 
+						failwith (Printf.sprintf "Failed to parse whitelist file line: %s\n" line)
 			end
 		) [] filename in
 	if lines = []
 	then None
 	else 
-		let r = "\\(" ^ (String.concat " \\| " lines) ^ "\\)" in
+		let r = "\\(" ^ (String.concat "\\|" lines) ^ "\\)" in
 		Some (Str.regexp r)
 
 let diff_whitelist a r = 

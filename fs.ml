@@ -150,9 +150,9 @@ type mode =
 		| List
 
 let _ =
-	let path = ref "/root" in
-	let db = ref "/home/djs/files.db" in
-	let whitelist = ref "" in
+	let path = ref "/" in
+	let db = ref "/var/xapi/files.db" in
+	let whitelist = ref "/etc/xensource/whitelist" in
 	let mode = ref Summarise in
 	Arg.parse
 		[ 

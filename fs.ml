@@ -2,12 +2,12 @@
 module File = struct
 	type t = {
 		path: string;
-		mtime: int;
+		mtime: int64;
 	}
 	let of_stat path s =
 		{ 
 			path = path; 
-			mtime = int_of_float s.Unix.LargeFile.st_mtime; 
+			mtime = Int64.of_float s.Unix.LargeFile.st_mtime; 
 		}
 end
 
@@ -44,15 +44,65 @@ let of_dir (root: string) =
 
 open Stringext
 
-let to_fd index fd = 
-	StringMap.iter
+let to_file index filename = 
+	Unixext.with_file filename [ Unix.O_WRONLY; Unix.O_CREAT ] 0o644 
+		(fun fd ->
+			StringMap.iter
+				(fun path file ->
+					let s = Printf.sprintf "%s,%Ld\n" path file.File.mtime in
+					ignore(Unix.write fd s 0 (String.length s))
+				) index
+		)
+
+let of_file = 
+	Unixext.file_lines_fold
+		(fun index line ->
+			match List.rev (String.split ',' line) with
+				| mtime :: rest ->
+					let path = String.concat "," (List.rev rest) in
+					let file = { 
+						File.mtime = Int64.of_string mtime;
+						File.path = path
+					} in
+					StringMap.add path file index
+				| _ ->
+					Printf.fprintf stderr "Skipping line: %s\n" line;
+					index
+		) StringMap.empty 
+
+let diff a b = 
+	StringMap.partition
 		(fun path file ->
-			let s = Printf.sprintf "%s,%d\n" (String.escaped ~rules:[',', "\\,"] path) file.File.mtime in
-			ignore(Unix.write fd s 0 (String.length s))
-		) index
+			StringMap.mem path b && (StringMap.find path b = file)
+		) a
 
 let _ =
-	let stat = Unix.LargeFile.stat "/" in
-	let all = of_dir "/" in
-	Unixext.with_file "/tmp/files.db" [ Unix.O_WRONLY; Unix.O_CREAT ] 0o644 
-		(to_fd all)
+	let path = ref "/root" in
+	let db = ref "/home/djs/files.db" in
+	Arg.parse
+		[ 
+			"-path", Arg.Set_string path, Printf.sprintf "Path to scan (default %s)" !path;
+			"-db", Arg.Set_string db, Printf.sprintf "Path to database (default %s)" !db;
+		]
+		(fun x -> Printf.fprintf stderr "Skipping unknown argument: %s\n%!" x)
+		"Scan for modified files in a filesystem";
+
+	if Sys.file_exists !db then begin
+		let previous = of_file !db in
+		let current = of_dir !path in
+		let same, different = diff previous current in
+		if different <> StringMap.empty then begin
+			Printf.printf "There are unexpected filesystem differences:\n";
+			StringMap.iter (fun path file -> 
+				Printf.printf "     %Ld %s\n" file.File.mtime path) different;
+			exit 1;
+		end else begin
+			Printf.printf "No unexpected filesystem differences.\n";
+			exit 0;
+		end
+	end else begin
+		Printf.printf "Creating initial database\n";
+		let current = of_dir !path in
+		to_file current !db
+	end
+

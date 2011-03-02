@@ -9,7 +9,7 @@ DATABASE=/var/xapi/files.db
 
 start() {
     rm -f ${DATABASE}
-	${FS} -db ${DATABASE}
+	time ${FS} -db ${DATABASE}
 }
 
 case $1 in

@@ -1,0 +1,38 @@
+# -*- rpm-spec -*-
+
+Summary: simple filesystem modification scanner
+Name:    fs
+Version: 0
+Release: @RPM_RELEASE@
+Group:   Development/Other
+License: LGPL+linking exception
+URL:  https://github.com/djs55/watchfs
+Source0: fs.tar.bz2
+BuildRoot: %{_tmppath}/%{name}-%{version}-root
+BuildRequires: ocaml, ocaml-findlib, ocaml-camlp4
+
+%description
+Simple filesystem modification scanner
+
+%prep 
+%setup -q
+%build
+mkdir $RPM_BUILD_ROOT
+DESTDIR=$RPM_BUILD_ROOT %{__make}
+
+%install
+rm -rf %{buildroot}
+
+DESTDIR=$RPM_BUILD_ROOT %{__make} install
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files
+%defattr(-,root,root,-)
+   /usr/bin/fs
+   /etc/firstboot.d/05-filesystem-check
+   /etc/xensource/bugtool/fs.xml
+   /etc/xensource/bugtool/fs/stuff.xml
+
+%changelog

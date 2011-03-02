@@ -2,31 +2,45 @@
 open Stringext
 
 module File = struct
+	type kind = File | Dir
+	let string_of_kind = function
+		| File -> "File"
+		| Dir -> "Dir"
+	let kind_of_string = function
+		| "File" -> File
+		| "Dir" -> Dir
+		| x -> failwith (Printf.sprintf "Unknown kind: '%s'" x)
 	type t = {
 		path: string;
 		mtime: int64;
 		size: int64;
+		kind: kind;
 	}
 	let of_stat path s =
 		{ 
 			path = path; 
 			mtime = Int64.of_float s.Unix.LargeFile.st_mtime; 
 			size = s.Unix.LargeFile.st_size;
+			kind = match s.Unix.LargeFile.st_kind with
+				| Unix.S_REG -> File
+				| Unix.S_DIR -> Dir
+				| _ -> failwith "Illegal st_kind"
 		}
 
 	let of_string line =
 		match List.rev (String.split ',' line) with
-			| mtime :: size :: rest ->
+			| mtime :: size :: kind :: rest ->
 				let path = String.concat "," (List.rev rest) in
 				{ 
 					mtime = Int64.of_string mtime;
 					size = Int64.of_string size;
-					path = path
+					path = path;
+					kind = kind_of_string kind;
 				}
 			| _ ->
 				raise Not_found
 	let to_string x =
-		Printf.sprintf "%s,%Ld,%Ld\n" x.path x.size x.mtime
+		Printf.sprintf "%s,%s,%Ld,%Ld\n" x.path (string_of_kind x.kind) x.size x.mtime
 end
 
 module StringMap = Map.Make(struct type t = string let compare = compare end)
@@ -89,9 +103,19 @@ let diff a b =
 
 let stats a = 
 	StringMap.fold
-		(fun path file (nfiles, nbytes) -> Int64.(add nfiles 1L, add nbytes file.File.size)) a (0L, 0L)
+		(fun path file (nfiles, nbytes) -> 
+			if file.File.kind = File.File
+			then Int64.(add nfiles 1L, add nbytes file.File.size)
+			else (nfiles, nbytes)
+		) a (0L, 0L)
 
 let string_of_stats (nfiles, nbytes) = Printf.sprintf "%Ld files (%Ld KiB)" nfiles (Int64.div nbytes 1024L)			
+
+let show_files prefix = 
+	StringMap.iter
+		(fun path file ->
+			if file.File.kind = File.File
+			then Printf.printf "%s%s\n" prefix path)
 
 type whitelist_kind = 
 		| Ignore  (** harmless mutation: ignore these *)
@@ -154,6 +178,7 @@ let _ =
 	let db = ref "/var/xapi/files.db" in
 	let whitelist = ref "/etc/xensource/whitelist" in
 	let mode = ref Summarise in
+	let verbose = ref false in
 	Arg.parse
 		[ 
 			"-path", Arg.Set_string path, Printf.sprintf "Path to scan (default %s)" !path;
@@ -164,6 +189,7 @@ let _ =
 					| "delete" -> mode := Delete
 					| "list" -> mode := List
 					| _ -> assert false), "Mode (default: summarise)";
+			"-v", Arg.Set verbose, Printf.sprintf "Verbose (default %b)" !verbose;
 		]
 		(fun x -> Printf.fprintf stderr "Skipping unknown argument: %s\n%!" x)
 		"Scan for modified files in a filesystem";
@@ -191,22 +217,18 @@ let _ =
 			| Summarise ->
 				Printf.printf "Total:             %s\n" (string_of_stats (stats different));
 				Printf.printf "Whitelist/Ignore:  %s\n" (string_of_stats (stats ignore));
+				if !verbose then show_files "    " ignore;
 				Printf.printf "Whitelist/Trash:   %s\n" (string_of_stats (stats trash));
+				if !verbose then show_files "    " trash;
 				Printf.printf "Whitelist/Persist: %s\n" (string_of_stats (stats persist));
+				if !verbose then show_files "    " persist;				
 				Printf.printf "Unexpected:        %s\n" (string_of_stats (stats rest));
+				show_files "    " rest;
 				
-				if rest <> StringMap.empty then begin
-					Printf.printf "Unexpected filesystem differences:\n";
-					StringMap.iter (fun path file -> 
-						Printf.printf "     %Ld %s\n" file.File.mtime path) rest;
-					exit 1;
-				end else begin
-					Printf.printf "No unexpected filesystem differences.\n";
-					exit 0;
-				end
+				if rest <> StringMap.empty then exit 1;
+				exit 0;
 			| List ->
-				StringMap.iter (fun path file -> 
-					Printf.printf "%s\n" path) rest
+				show_files "" rest
 			| Delete -> failwith "Unimplemented"
 	end else begin
 		Printf.printf "Creating initial database\n";

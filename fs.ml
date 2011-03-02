@@ -1,6 +1,8 @@
 
 open Stringext
 
+external file_actual_size: string -> int64 = "stub_file_actual_size"
+
 module File = struct
 	type kind = File | Dir
 	let string_of_kind = function
@@ -62,7 +64,10 @@ let of_dir (root: string) =
 		then 
 			let children = 
 				if Sys.is_directory root then Sys.readdir root else [| |] in
-			let files = StringMap.add root (File.of_stat root s) files in
+			let file = File.of_stat root s in
+			(* Work around the sparse file problem *)
+			let file = { file with File.size = file_actual_size root } in
+			let files = StringMap.add root file files in
 			let inodes = IntSet.add s.Unix.LargeFile.st_ino inodes in
 			Array.fold_left 
 				(fun acc file -> 

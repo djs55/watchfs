@@ -1,9 +1,15 @@
+CC = gcc
+CFLAGS = -Wall -fPIC -O2 -I/usr/lib/ocaml -I./
+OCAMLOPT = ocamlfind ocamlopt -package "stdext,unix,str"
 
-fs: fs.ml
-	ocamlfind ocamlopt -linkpkg -package "stdext,unix,str" fs.ml -o fs
+fs: fs.cmx fs_stubs.o
+	$(OCAMLOPT) -linkpkg fs.cmx fs_stubs.o -o $@
 
-watch: watch.ml
-	ocamlfind ocamlopt -linkpkg -package "inotify,unix" watch.ml -o watch
+%.cmx: %.ml
+	$(OCAMLOPT) -c -o $@ $<
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 install: fs bugtool/fs.xml bugtool/stuff.xml whitelist
 	install -D fs $(DESTDIR)/opt/xensource/libexec/fs

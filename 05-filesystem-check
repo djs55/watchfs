@@ -1,0 +1,17 @@
+#!/bin/bash
+##
+# Update the database of "pristine" file mtimes
+
+set -eu
+
+FS=/usr/bin/fs
+DATABASE=/var/xapi/files.db
+
+start() {
+    rm -f ${DATABASE}
+	${FS} -db ${DATABASE}
+}
+
+case $1 in
+    start) start ;;
+esac

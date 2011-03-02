@@ -34,5 +34,6 @@ rm -rf $RPM_BUILD_ROOT
    /etc/firstboot.d/05-filesystem-check
    /etc/xensource/bugtool/fs.xml
    /etc/xensource/bugtool/fs/stuff.xml
+   /etc/xensource/whitelist
 
 %changelog

@@ -5,11 +5,12 @@ fs: fs.ml
 watch: watch.ml
 	ocamlfind ocamlopt -linkpkg -package "inotify,unix" watch.ml -o watch
 
-install: fs bugtool/fs.xml bugtool/stuff.xml
+install: fs bugtool/fs.xml bugtool/stuff.xml whitelist
 	install -D fs $(DESTDIR)/usr/bin/fs
 	install -D bugtool/fs.xml $(DESTDIR)/etc/xensource/bugtool/fs.xml
 	install -D bugtool/stuff.xml $(DESTDIR)/etc/xensource/bugtool/fs/stuff.xml
 	install -D 05-filesystem-check $(DESTDIR)/etc/firstboot.d/05-filesystem-check
+	install -D whitelist $(DESTDIR)/etc/xensource/whitelist
 
 RPM_SOURCEDIR?=/usr/src/redhat/SOURCES
 RPM_RELEASE=$(call git rev-list HEAD | wc -l)

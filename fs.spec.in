@@ -30,7 +30,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
-   /usr/bin/fs
+   /opt/xensource/libexec/fs
    /etc/firstboot.d/05-filesystem-check
    /etc/xensource/bugtool/fs.xml
    /etc/xensource/bugtool/fs/stuff.xml

@@ -38,7 +38,7 @@ P:/var/log
 T:/var/run
 T:/var/tmp
 P:/var/xapi/blobs/messages
-P:/var/xapi/blobs/rrds$
+P:/var/xapi/blobs/rrds
 T:/var/xapi/forker
 P:/var/xapi/files.db$
 P:/var/xapi/local.db$

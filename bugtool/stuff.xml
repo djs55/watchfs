@@ -1,0 +1,3 @@
+<collect>
+<command label="fs">/bin/ls /</command>
+</collect>

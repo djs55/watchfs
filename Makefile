@@ -4,3 +4,8 @@ fs: fs.ml
 
 watch: watch.ml
 	ocamlfind ocamlopt -linkpkg -package "inotify,unix" watch.ml -o watch
+
+install: fs bugtool/fs.xml bugtool/stuff.xml
+	install -D fs $(DESTDIR)/usr/bin/fs
+	install -D bugtool/fs.xml $(DESTDIR)/etc/xensource/bugtool/fs.xml
+	install -D bugtool/stuff.xml $(DESTDIR)/etc/xensource/bugtool/fs/stuff.xml

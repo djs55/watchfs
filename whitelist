@@ -49,3 +49,4 @@ T:/var/xapi/udhcpd.conf$
 T:/var/xapi/xapi-ssl.conf$
 T:/var/xen/vncterm
 I:/root/.lesshst$
+I:.*\.pyc$

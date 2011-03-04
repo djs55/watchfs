@@ -4,7 +4,7 @@
 
 set -eu
 
-FS=/opt/xensource/libexec/fs
+FS=/opt/xensource/libexec/filesystem_summarise
 DATABASE=/var/xapi/files.db
 
 start() {

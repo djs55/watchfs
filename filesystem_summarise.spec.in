@@ -1,13 +1,13 @@
 # -*- rpm-spec -*-
 
 Summary: simple filesystem modification scanner
-Name:    fs
+Name:    filesystem_summarise
 Version: 0
 Release: @RPM_RELEASE@
 Group:   Development/Other
 License: LGPL+linking exception
 URL:  https://github.com/djs55/watchfs
-Source0: fs.tar.bz2
+Source0: filesystem_summarise.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-root
 BuildRequires: ocaml, ocaml-findlib, ocaml-camlp4
 
@@ -30,10 +30,10 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
-   /opt/xensource/libexec/fs
-   /etc/firstboot.d/05-filesystem-check
-   /etc/xensource/bugtool/fs.xml
-   /etc/xensource/bugtool/fs/stuff.xml
+   /opt/xensource/libexec/filesystem_summarise
+   /etc/firstboot.d/05-filesystem-summarise
+   /etc/xensource/bugtool/filesystem_summarise.xml
+   /etc/xensource/bugtool/filesystem_summarise/stuff.xml
    /etc/xensource/whitelist
 
 %changelog

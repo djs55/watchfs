@@ -65,8 +65,10 @@ let of_dir (root: string) =
 			let children = 
 				if Sys.is_directory root then Sys.readdir root else [| |] in
 			let file = File.of_stat root s in
+(*
 			(* Work around the sparse file problem *)
 			let file = { file with File.size = min s.Unix.LargeFile.st_size (file_actual_size root) } in
+*)
 			let files = StringMap.add root file files in
 			let inodes = IntSet.add s.Unix.LargeFile.st_ino inodes in
 			Array.fold_left 
